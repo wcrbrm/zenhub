@@ -1,26 +1,30 @@
-use std::collections::HashSet;
-use structopt::StructOpt;
-use serde::{Serialize, Deserialize};
-use std::error::Error;
 use reqwest::header::HeaderMap;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::error::Error;
+use structopt::StructOpt;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "basic")]
 struct Opt {
     /// zen hub api root
-    #[structopt(long, env="ZENHUB_API_ROOT", default_value="https://api.zenhub.com")]
+    #[structopt(
+        long,
+        env = "ZENHUB_API_ROOT",
+        default_value = "https://api.zenhub.com"
+    )]
     api_root: String,
 
     /// zen hub workspace ID
-    #[structopt(long, env="ZENHUB_WORKSPACE_ID")]
+    #[structopt(long, env = "ZENHUB_WORKSPACE_ID")]
     workspace_id: String,
-    
+
     /// zen hub api
-    #[structopt(long, env="ZENHUB_API_TOKEN")]
+    #[structopt(long, env = "ZENHUB_API_TOKEN")]
     api_token: String,
 
     /// zen agent
-    #[structopt(long, env="ZENHUB_AGENT", default_value="webapp/2.45.17")]
+    #[structopt(long, env = "ZENHUB_AGENT", default_value = "webapp/2.45.17")]
     agent: String,
 }
 
@@ -113,7 +117,10 @@ async fn read_user(opt: Opt) -> Result<ZenhubUserResponse, Box<dyn Error>> {
     let response: ZenhubUserResponse = reqwest::Client::new()
         .get(&url)
         .headers(zenhub_headers(opt))
-        .send().await?.json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
     Ok(response)
 }
 
@@ -123,17 +130,28 @@ async fn read_pipelines(opt: Opt) -> Result<ZenhubBoardResponse, Box<dyn Error>>
     let res = reqwest::Client::new()
         .get(&url)
         .headers(zenhub_headers(opt))
-        .send().await?.json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
     Ok(res)
 }
 
 #[allow(dead_code)]
-async fn read_issues(opt: Opt, repositories: Vec<ZenhubRepository>)-> Result<String, Box<dyn Error>> {
-    let ids = repositories.iter().map(|x| format!("{}", x.gh_id)).collect::<HashSet<_>>();
+async fn read_issues(
+    opt: Opt,
+    repositories: Vec<ZenhubRepository>,
+) -> Result<String, Box<dyn Error>> {
+    let ids = repositories
+        .iter()
+        .map(|x| format!("{}", x.gh_id))
+        .collect::<HashSet<_>>();
     let ids_str: String = ids.iter().map(|x| &**x).collect::<Vec<_>>().join(",");
 
-    let mut url: String = format!("{}/v5/workspaces/{}/issues?repo_ids={}", 
-            opt.api_root, opt.workspace_id, ids_str);
+    let mut url: String = format!(
+        "{}/v5/workspaces/{}/issues?repo_ids={}",
+        opt.api_root, opt.workspace_id, ids_str
+    );
 
     url.push_str("&epics=1");
     url.push_str("&estimates=1");
@@ -147,7 +165,10 @@ async fn read_issues(opt: Opt, repositories: Vec<ZenhubRepository>)-> Result<Str
     let res = reqwest::Client::new()
         .get(&url)
         .headers(zenhub_headers(opt))
-        .send().await?.text().await?;
+        .send()
+        .await?
+        .text()
+        .await?;
     println!("{}", res);
     Ok(res)
 }
@@ -155,7 +176,8 @@ async fn read_issues(opt: Opt, repositories: Vec<ZenhubRepository>)-> Result<Str
 #[allow(dead_code)]
 async fn read_repositories(opt: Opt) -> Result<Vec<ZenhubRepository>, Box<dyn Error>> {
     let url: String = format!("{}/v1/graphql", opt.api_root);
-    let payload = format!(r###"{{"query":"{{
+    let payload = format!(
+        r###"{{"query":"{{
         workspace(id: \"{}\") {{
             ...space
         }}
@@ -170,37 +192,42 @@ async fn read_repositories(opt: Opt) -> Result<Vec<ZenhubRepository>, Box<dyn Er
             ownerName
         }}
     }}
-"}}"###, opt.workspace_id).replace('\n', "\\n");
+"}}"###,
+        opt.workspace_id
+    )
+    .replace('\n', "\\n");
     // println!("url={}\n{}\n", url, payload);
- 
+
     let r = reqwest::Client::new()
         .post(&url)
         .headers(zenhub_headers(opt))
         .body(payload)
-        .send().await?
-        .json::<ZenhubRepositoriesResponse>().await?;
+        .send()
+        .await?
+        .json::<ZenhubRepositoriesResponse>()
+        .await?;
     // println!("{:#?}", r.data.workspace.repositories);
     Ok(r.data.workspace.repositories)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let opt = Opt::from_args();  
-//    println!("Options {:#?}", opt);
+    let opt = Opt::from_args();
+    //    println!("Options {:#?}", opt);
 
-//    let resp_user = read_user(opt.clone()).await.unwrap();
-//    println!("User\t{:#?}", resp_user.github.email);
+    //    let resp_user = read_user(opt.clone()).await.unwrap();
+    //    println!("User\t{:#?}", resp_user.github.email);
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
     read_issues(opt, repositories).await?;
 
-//    for repo in repositories {
-//         println!("{}\t{}", repo.gh_id, repo.name);
-//    }
+    //    for repo in repositories {
+    //         println!("{}\t{}", repo.gh_id, repo.name);
+    //    }
 
-//  let board = read_pipelines(opt.clone()).await.unwrap();
-//  let pipelines = board.pipelines.iter().map(|x| &x.name).collect::<HashSet<_>>();
-//  println!("Pipelines\t{:#?}", pipelines);
+    //  let board = read_pipelines(opt.clone()).await.unwrap();
+    //  let pipelines = board.pipelines.iter().map(|x| &x.name).collect::<HashSet<_>>();
+    //  println!("Pipelines\t{:#?}", pipelines);
 
     Ok(())
 }
