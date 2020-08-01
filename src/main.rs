@@ -1,10 +1,8 @@
-#[allow(unused_imports)]
 use std::collections::HashSet;
-
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use std::error::Error;
-
+use reqwest::header::HeaderMap;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "basic")]
@@ -101,13 +99,20 @@ struct ZenhubBoardResponse {
 }
 
 #[allow(dead_code)]
+fn zenhub_headers(opt: Opt) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert("X-Authentication-Token", opt.api_token.parse().unwrap());
+    headers.insert("X-Zenhub-Agent", opt.agent.parse().unwrap());
+    headers.insert("Content-Type", "application/json".parse().unwrap());
+    headers
+}
+
+#[allow(dead_code)]
 async fn read_user(opt: Opt) -> Result<ZenhubUserResponse, Box<dyn Error>> {
     let url: String = format!("{}/v1/user", opt.api_root);
     let response: ZenhubUserResponse = reqwest::Client::new()
         .get(&url)
-        .header("X-Authentication-Token", opt.api_token)
-        .header("X-Zenhub-Agent", opt.agent)
-        .header("Content-Type", "application/json")
+        .headers(zenhub_headers(opt))
         .send().await?.json().await?;
     Ok(response)
 }
@@ -117,9 +122,7 @@ async fn read_pipelines(opt: Opt) -> Result<ZenhubBoardResponse, Box<dyn Error>>
     let url: String = format!("{}/v5/workspaces/{}/board", opt.api_root, opt.workspace_id);
     let res = reqwest::Client::new()
         .get(&url)
-        .header("X-Authentication-Token", opt.api_token)
-        .header("X-Zenhub-Agent", opt.agent)
-        .header("Content-Type", "application/json")
+        .headers(zenhub_headers(opt))
         .send().await?.json().await?;
     Ok(res)
 }
@@ -128,7 +131,6 @@ async fn read_pipelines(opt: Opt) -> Result<ZenhubBoardResponse, Box<dyn Error>>
 async fn read_issues(opt: Opt, repositories: Vec<ZenhubRepository>)-> Result<String, Box<dyn Error>> {
     let ids = repositories.iter().map(|x| format!("{}", x.gh_id)).collect::<HashSet<_>>();
     let ids_str: String = ids.iter().map(|x| &**x).collect::<Vec<_>>().join(",");
-
 
     let mut url: String = format!("{}/v5/workspaces/{}/issues?repo_ids={}", 
             opt.api_root, opt.workspace_id, ids_str);
@@ -144,9 +146,7 @@ async fn read_issues(opt: Opt, repositories: Vec<ZenhubRepository>)-> Result<Str
     println!("{}", url);
     let res = reqwest::Client::new()
         .get(&url)
-        .header("X-Authentication-Token", opt.api_token)
-        .header("X-Zenhub-Agent", opt.agent)
-        .header("Content-Type", "application/json")
+        .headers(zenhub_headers(opt))
         .send().await?.text().await?;
     println!("{}", res);
     Ok(res)
@@ -175,9 +175,7 @@ async fn read_repositories(opt: Opt) -> Result<Vec<ZenhubRepository>, Box<dyn Er
  
     let r = reqwest::Client::new()
         .post(&url)
-        .header("X-Authentication-Token", opt.api_token)
-        .header("X-Zenhub-Agent", opt.agent)
-        .header("Content-Type", "application/json")
+        .headers(zenhub_headers(opt))
         .body(payload)
         .send().await?
         .json::<ZenhubRepositoriesResponse>().await?;
