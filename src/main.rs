@@ -5,13 +5,17 @@ use std::error::Error;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "basic")]
+#[structopt(
+    name = "zenhub",
+    about = "A command line quickie to view zenhub pipelines board"
+)]
 struct Opt {
     /// zen hub api root
     #[structopt(
         long,
         env = "ZENHUB_API_ROOT",
-        default_value = "https://api.zenhub.com"
+        default_value = "https://api.zenhub.com",
+        hidden = true
     )]
     api_root: String,
 
@@ -20,12 +24,16 @@ struct Opt {
     workspace_id: String,
 
     /// zen hub api
-    #[structopt(long, env = "ZENHUB_API_TOKEN")]
+    #[structopt(long, env = "ZENHUB_API_TOKEN", hide_env_values = true)]
     api_token: String,
 
     /// zen agent
     #[structopt(long, env = "ZENHUB_AGENT", default_value = "webapp/2.45.17")]
     agent: String,
+
+    /// pipelines to be rendered
+    #[structopt(long, short)]
+    pipeline: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -215,19 +223,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::from_args();
     //    println!("Options {:#?}", opt);
 
-    //    let resp_user = read_user(opt.clone()).await.unwrap();
-    //    println!("User\t{:#?}", resp_user.github.email);
+    let resp_user = read_user(opt.clone()).await.unwrap();
+    println!(
+        "User\t{}\t{}",
+        resp_user.github.username, resp_user.github.email
+    );
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
-    read_issues(opt, repositories).await?;
+    read_issues(opt.clone(), repositories).await?;
 
     //    for repo in repositories {
     //         println!("{}\t{}", repo.gh_id, repo.name);
     //    }
 
-    //  let board = read_pipelines(opt.clone()).await.unwrap();
-    //  let pipelines = board.pipelines.iter().map(|x| &x.name).collect::<HashSet<_>>();
-    //  println!("Pipelines\t{:#?}", pipelines);
+    let board = read_pipelines(opt.clone()).await.unwrap();
+    let pipelines = board
+        .pipelines
+        .iter()
+        .map(|x| &x.name)
+        .collect::<HashSet<_>>();
+    println!("Pipelines\t{:#?}", pipelines);
 
     Ok(())
 }
