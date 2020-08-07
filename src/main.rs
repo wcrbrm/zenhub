@@ -18,7 +18,6 @@ struct Opt {
         hidden = true
     )]
     api_root: String,
-
     /// zen hub workspace ID
     #[structopt(long, env = "ZENHUB_WORKSPACE_ID")]
     workspace_id: String,
@@ -96,11 +95,59 @@ struct ZenhubIssue {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct ZenhubAssignee {
+    html_url: Option<String>,
+    avatar_url: Option<String>,
+    login: String,
+    id: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ZenhubLabel {
+    color: Option<String>,
+    name: String,
+    id: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ZenhubMilestone {
+    state: String,
+    number: u64,
+    title: String,
+    due_on: Option<String>,
+    id: u64,
+    updated_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct ZenhubPipeline {
     name: String,
     description: Option<String>,
     _id: String,
-    issues: Vec<ZenhubIssue>,
+    issues: Option<Vec<ZenhubIssue>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ZenhubIssueInfo {
+    assignee: Option<ZenhubAssignee>,
+    assignees: Vec<ZenhubAssignee>,
+    created_at: String,
+    closed_at: Option<String>,
+    estimate: Option<f32>,
+    html_url: String,
+    is_epic: bool,
+    labels: Vec<ZenhubLabel>,
+    milestone: Option<ZenhubMilestone>,
+    number: Option<u32>,
+    repo_name: String,
+    organization_name: Option<String>,
+    parent_epics: Vec<ZenhubIssue>,
+    state: String,
+    title: String,
+    updated_at: Option<String>,
+    user: Option<ZenhubAssignee>,
+    issue_number: u64,
+    pipeline: Option<ZenhubPipeline>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -149,7 +196,7 @@ async fn read_pipelines(opt: Opt) -> Result<ZenhubBoardResponse, Box<dyn Error>>
 async fn read_issues(
     opt: Opt,
     repositories: Vec<ZenhubRepository>,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<Vec<ZenhubIssueInfo>, Box<dyn Error>> {
     let ids = repositories
         .iter()
         .map(|x| format!("{}", x.gh_id))
@@ -175,9 +222,9 @@ async fn read_issues(
         .headers(zenhub_headers(opt))
         .send()
         .await?
-        .text()
+        .json::<Vec<ZenhubIssueInfo>>()
         .await?;
-    println!("{}", res);
+    println!("{:#?}", res);
     Ok(res)
 }
 
