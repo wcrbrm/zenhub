@@ -292,6 +292,22 @@ async fn read_repositories(opt: Opt) -> Result<Vec<ZenhubRepository>, Box<dyn Er
     Ok(r.data.workspace.repositories)
 }
 
+fn display_issues(list: Vec<ZenhubIssueInfo>) {
+    for i in list {
+        let mut estimate_str: String = "".to_string();
+        if let Some(est) = i.clone().estimate.take() {
+            estimate_str = format!("{}", est);
+        }
+        println!(
+            "{}#{}\t{}h\t{}",
+            i.repo_name,
+            i.issue_number,
+            estimate_str,
+            i.title.trim(),
+        )
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::from_args();
@@ -304,12 +320,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
-    let filter = ZenhubIssuesFilter {
-        by_assignee: Some(resp_user.github.username),
-        by_pipeline_name: Some("Backlog".to_string()),
-    };
-    let issues = read_issues(opt.clone(), repositories, &filter).await?;
-    println!("issues {:#?}", issues);
+    let username = Some(resp_user.github.username);
+    println!("# Backlog");
+    display_issues(
+        read_issues(
+            opt.clone(),
+            repositories.clone(),
+            &ZenhubIssuesFilter {
+                by_assignee: username.clone(),
+                by_pipeline_name: Some("Backlog".to_string()),
+            },
+        )
+        .await?,
+    );
+
+    println!("# Second Backlog");
+    display_issues(
+        read_issues(
+            opt.clone(),
+            repositories.clone(),
+            &ZenhubIssuesFilter {
+                by_assignee: username.clone(),
+                by_pipeline_name: Some("Backlog".to_string()),
+            },
+        )
+        .await?,
+    );
+
     //    for repo in repositories {
     //         println!("{}\t{}", repo.gh_id, repo.name);
     //    }
