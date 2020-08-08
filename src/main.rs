@@ -59,7 +59,7 @@ struct ZenhubUserResponse {
     last_auth: Option<String>,  // DateTime
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ZenhubRepository {
     /// Github repository ID
@@ -70,7 +70,7 @@ struct ZenhubRepository {
     owner_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubRepositoriesResponseDataWorkspace {
     id: String,
     name: String,
@@ -78,23 +78,23 @@ struct ZenhubRepositoriesResponseDataWorkspace {
     repositories: Vec<ZenhubRepository>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubRepositoriesResponseData {
     workspace: ZenhubRepositoriesResponseDataWorkspace,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubRepositoriesResponse {
     data: ZenhubRepositoriesResponseData,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubIssue {
     issue_number: u64,
     repo_id: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubAssignee {
     html_url: Option<String>,
     avatar_url: Option<String>,
@@ -102,14 +102,14 @@ struct ZenhubAssignee {
     id: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubLabel {
     color: Option<String>,
     name: String,
     id: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubMilestone {
     state: String,
     number: u64,
@@ -119,7 +119,7 @@ struct ZenhubMilestone {
     updated_at: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubPipeline {
     name: String,
     description: Option<String>,
@@ -127,7 +127,7 @@ struct ZenhubPipeline {
     issues: Option<Vec<ZenhubIssue>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct ZenhubIssueInfo {
     assignee: Option<ZenhubAssignee>,
     assignees: Vec<ZenhubAssignee>,
@@ -192,10 +192,17 @@ async fn read_pipelines(opt: Opt) -> Result<ZenhubBoardResponse, Box<dyn Error>>
     Ok(res)
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ZenhubIssuesFilter {
+    by_assignee: Option<String>,
+    by_pipeline_name: Option<String>,
+}
+
 #[allow(dead_code)]
 async fn read_issues(
     opt: Opt,
     repositories: Vec<ZenhubRepository>,
+    filter: &ZenhubIssuesFilter,
 ) -> Result<Vec<ZenhubIssueInfo>, Box<dyn Error>> {
     let ids = repositories
         .iter()
@@ -216,7 +223,6 @@ async fn read_issues(
     url.push_str("&priorities=1");
     url.push_str("&releases=1");
 
-    println!("{}", url);
     let res = reqwest::Client::new()
         .get(&url)
         .headers(zenhub_headers(opt))
@@ -224,8 +230,29 @@ async fn read_issues(
         .await?
         .json::<Vec<ZenhubIssueInfo>>()
         .await?;
-    println!("{:#?}", res);
-    Ok(res)
+    let filtered = res
+        .clone()
+        .drain(..)
+        .filter(|x| {
+            let mut m = true;
+            if let Some(by_assignee) = filter.by_assignee.to_owned().take() {
+                if let Some(assignee) = x.clone().assignee.take() {
+                    m = m && (assignee.login == by_assignee);
+                } else {
+                    m = false
+                }
+            }
+            if let Some(by_pipeline_name) = filter.by_pipeline_name.to_owned().take() {
+                if let Some(pipeline) = x.clone().pipeline.take() {
+                    m = m && (pipeline.name == by_pipeline_name)
+                } else {
+                    m = false
+                }
+            }
+            m
+        })
+        .collect::<Vec<ZenhubIssueInfo>>();
+    Ok(filtered)
 }
 
 #[allow(dead_code)]
@@ -277,19 +304,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
-    read_issues(opt.clone(), repositories).await?;
-
+    let filter = ZenhubIssuesFilter {
+        by_assignee: Some(resp_user.github.username),
+        by_pipeline_name: Some("Backlog".to_string()),
+    };
+    let issues = read_issues(opt.clone(), repositories, &filter).await?;
+    println!("issues {:#?}", issues);
     //    for repo in repositories {
     //         println!("{}\t{}", repo.gh_id, repo.name);
     //    }
 
-    let board = read_pipelines(opt.clone()).await.unwrap();
-    let pipelines = board
-        .pipelines
-        .iter()
-        .map(|x| &x.name)
-        .collect::<HashSet<_>>();
-    println!("Pipelines\t{:#?}", pipelines);
+    // let board = read_pipelines(opt.clone()).await.unwrap();
+    // let pipelines = board
+    // .pipelines
+    // .iter()
+    // .map(|x| &x.name)
+    // .collect::<HashSet<_>>();
+    // println!("Pipelines\t{:#?}", pipelines);
 
     Ok(())
 }
