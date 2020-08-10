@@ -33,6 +33,18 @@ struct Opt {
     /// pipelines to be rendered
     #[structopt(long, short)]
     pipeline: Vec<String>,
+
+    /// eta - sets ETA in hours to the issue
+    #[structopt(long, short, default_value = "0.0")]
+    estimate: f32,
+
+    /// set issueis pipeline
+    #[structopt(long, short, default_value = "")]
+    set: String,
+
+    /// issue - specify repo and issue # to be affected, colon-separated
+    #[structopt(long, short, default_value = "")]
+    issue: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -329,7 +341,7 @@ fn display_issues(pipeline: ZenhubPipelineInfo) {
             estimate_str = format!("{}", est);
         }
         println!(
-            "{}#{}\t{}h\t{}\t{}",
+            "{}:{}\t{}h\t{}\t{}",
             i.repo_name,
             i.issue_number,
             estimate_str,
@@ -352,30 +364,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
     let username = Some(resp_user.github.username);
-    display_issues(
-        read_issues(
-            opt.clone(),
-            repositories.clone(),
-            &ZenhubIssuesFilter {
-                by_assignee: username.clone(),
-                by_pipeline_name: Some("Backlog".to_string()),
-            },
-        )
-        .await?,
-    );
 
-    display_issues(
-        read_issues(
-            opt.clone(),
-            repositories.clone(),
-            &ZenhubIssuesFilter {
-                by_assignee: username.clone(),
-                by_pipeline_name: Some("Second Backlog".to_string()),
-            },
-        )
-        .await?,
-    );
+    if opt.clone().estimate > 0.0 {}
 
+    if !opt.clone().set.is_empty() {}
+
+    let pipelines = opt.clone().pipeline;
+    for p in pipelines {
+        display_issues(
+            read_issues(
+                opt.clone(),
+                repositories.clone(),
+                &ZenhubIssuesFilter {
+                    by_assignee: username.clone(),
+                    by_pipeline_name: Some(p),
+                },
+            )
+            .await?,
+        );
+    }
     //    for repo in repositories {
     //         println!("{}\t{}", repo.gh_id, repo.name);
     //    }
