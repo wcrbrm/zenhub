@@ -198,12 +198,20 @@ struct ZenhubIssuesFilter {
     by_pipeline_name: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct ZenhubPipelineInfo {
+    title: String,
+    list: Vec<ZenhubIssueInfo>,
+    estimate: f32,
+    not_estimated: i32,
+}
+
 #[allow(dead_code)]
 async fn read_issues(
     opt: Opt,
     repositories: Vec<ZenhubRepository>,
     filter: &ZenhubIssuesFilter,
-) -> Result<Vec<ZenhubIssueInfo>, Box<dyn Error>> {
+) -> Result<ZenhubPipelineInfo, Box<dyn Error>> {
     let ids = repositories
         .iter()
         .map(|x| format!("{}", x.gh_id))
@@ -230,6 +238,8 @@ async fn read_issues(
         .await?
         .json::<Vec<ZenhubIssueInfo>>()
         .await?;
+    let mut estimate: f32 = 0.0;
+    let mut not_estimated = 0;
     let filtered = res
         .clone()
         .drain(..)
@@ -249,10 +259,26 @@ async fn read_issues(
                     m = false
                 }
             }
+            if m {
+                if let Some(estimate_val) = x.clone().estimate.take() {
+                    estimate += estimate_val;
+                } else {
+                    not_estimated += 1;
+                }
+            }
             m
         })
         .collect::<Vec<ZenhubIssueInfo>>();
-    Ok(filtered)
+    let mut title: String = "Issues".to_string();
+    if let Some(pipeline_name) = filter.by_pipeline_name.to_owned().take() {
+        title = pipeline_name;
+    }
+    Ok(ZenhubPipelineInfo {
+        title: title,
+        list: filtered,
+        estimate: estimate,
+        not_estimated: not_estimated,
+    })
 }
 
 #[allow(dead_code)]
@@ -292,17 +318,22 @@ async fn read_repositories(opt: Opt) -> Result<Vec<ZenhubRepository>, Box<dyn Er
     Ok(r.data.workspace.repositories)
 }
 
-fn display_issues(list: Vec<ZenhubIssueInfo>) {
-    for i in list {
+fn display_issues(pipeline: ZenhubPipelineInfo) {
+    println!(
+        "## -- {} (estimate: {}, not estimated: {})",
+        pipeline.title, pipeline.estimate, pipeline.not_estimated
+    );
+    for i in pipeline.list {
         let mut estimate_str: String = "".to_string();
         if let Some(est) = i.clone().estimate.take() {
             estimate_str = format!("{}", est);
         }
         println!(
-            "{}#{}\t{}h\t{}",
+            "{}#{}\t{}h\t{}\t{}",
             i.repo_name,
             i.issue_number,
             estimate_str,
+            i.state,
             i.title.trim(),
         )
     }
@@ -321,7 +352,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let repositories = read_repositories(opt.clone()).await.unwrap();
     let username = Some(resp_user.github.username);
-    println!("# Backlog");
     display_issues(
         read_issues(
             opt.clone(),
@@ -334,14 +364,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?,
     );
 
-    println!("# Second Backlog");
     display_issues(
         read_issues(
             opt.clone(),
             repositories.clone(),
             &ZenhubIssuesFilter {
                 by_assignee: username.clone(),
-                by_pipeline_name: Some("Backlog".to_string()),
+                by_pipeline_name: Some("Second Backlog".to_string()),
             },
         )
         .await?,
